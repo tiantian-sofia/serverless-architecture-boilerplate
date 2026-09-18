@@ -6,6 +6,7 @@
   "scripts": {
     "docker": "docker-compose up --force-recreate",
     "dev": "npm install; serverless offline start --stage local",
+    "test": "npm run unit-test",
     "unit-test": "mocha --recursive test/unit/",
     "integration-test": "mocha --recursive test/integration/"
   },

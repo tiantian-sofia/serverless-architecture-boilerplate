@@ -5,6 +5,28 @@ const response = require('../../../shared/lib/response');
 
 const DYNAMO_TABLE_BOOKS = process.env.DYNAMO_TABLE_BOOKS || 'books';
 
+const assignAttribute = (params, name, value) => {
+    if (value !== undefined && value !== null) {
+        params[name] = {
+            Action: 'PUT',
+            Value: value
+        };
+    }
+};
+
+const notFound = callback => {
+    return callback(null, {
+        statusCode: 404,
+        headers: {
+            "Access-Control-Allow-Origin": "*"
+        },
+        body: JSON.stringify({
+            status: 404,
+            message: "Not Found"
+        })
+    });
+};
+
 /**
  * Update Item with PUT request
  *
@@ -18,40 +40,57 @@ const DYNAMO_TABLE_BOOKS = process.env.DYNAMO_TABLE_BOOKS || 'books';
  */
 module.exports.update = (event, context, callback) => {
 
-  const body = event.body ? event.body : event;
-  const data = JSON.parse(body);
+    let data;
 
-  const key = {
-    hashkey: event.pathParameters.hashkey
-  };
+    try {
+        const body = event.body ? event.body : event;
+        data = typeof body === 'string' ? JSON.parse(body) : body;
+    } catch (error) {
+        return response.json(callback, {
+            status: 400,
+            message: 'Invalid JSON body'
+        }, 400);
+    }
 
-  const params = {};
-
-  if (data.title) {
-    params.title = {
-      Action: 'PUT',
-      Value: data.title
+    const key = {
+        hashkey: event.pathParameters.hashkey
     };
-  }
 
-  if (data.author) {
-    params.author = {
-      Action: 'PUT',
-      Value: data.author
-    };
-  }
+    dynamo.find(key, DYNAMO_TABLE_BOOKS).then(book => {
 
-  if (data.price) {
-    params.price = {
-      Action: 'PUT',
-      Value: data.price
-    };
-  }
+        if (!book.Item) {
+            return notFound(callback);
+        }
 
-  dynamo.updateItem(key, params, DYNAMO_TABLE_BOOKS).then(success => {
+        const params = {};
 
-    response.json(callback, success.Attributes);
+        assignAttribute(params, 'title', data.title);
+        assignAttribute(params, 'author', data.author);
+        assignAttribute(params, 'price', data.price);
 
-  });
+        if (Object.keys(params).length === 0) {
+            return response.json(callback, book.Item);
+        }
+
+        return dynamo.updateItem(key, params, DYNAMO_TABLE_BOOKS, {
+            ConditionExpression: 'attribute_exists(hashkey)'
+        }).then(success => {
+
+            response.json(callback, success.Attributes);
+
+        }).catch(err => {
+
+            if (err && err.code === 'ConditionalCheckFailedException') {
+                return notFound(callback);
+            }
+
+            response.json(callback, err, 500);
+        });
+
+    }).catch(err => {
+
+        response.json(callback, err, 500);
+
+    });
 
 };

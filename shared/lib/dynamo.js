@@ -49,10 +49,10 @@ const client = {
     /**
      * Find by Key comparison
      */
-    find: where => {
+    find: (where, table = tableDynamo) => {
 
         const params = {
-            TableName: tableDynamo,
+            TableName: table,
             Key: where
         };
 
@@ -73,8 +73,13 @@ const client = {
      * Execute a DynamoDB Scan 
      * Eventually Consistent
      */
-    scan: (params, limit, table = tableDynamo) => {
+    scan: (params = {}, limit, table = tableDynamo) => {
         params.TableName = table;
+
+        if (limit !== null && limit !== undefined) {
+            params.Limit = limit;
+        }
+
         return dynamoClient.scan(params).promise();
     },
 
@@ -97,14 +102,22 @@ const client = {
     /**
      * Update item identified by Key
      */
-    updateItem: (key, attributes, table = tableDynamo) => {
-        
+    updateItem: (key, attributes, table = tableDynamo, options = {}) => {
+
         const params = {
             TableName: table,
             Key: key,
             ReturnValues: "ALL_NEW",
             AttributeUpdates: attributes
         };
+
+        if (options.ConditionExpression) {
+            params.ConditionExpression = options.ConditionExpression;
+        }
+
+        if (options.ExpressionAttributeNames) {
+            params.ExpressionAttributeNames = options.ExpressionAttributeNames;
+        }
 
         return dynamoClient.update(params).promise();
     },
