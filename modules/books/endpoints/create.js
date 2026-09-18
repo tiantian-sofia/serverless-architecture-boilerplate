@@ -29,8 +29,17 @@ const DYNAMO_TABLE_BOOKS = process.env.DYNAMO_TABLE_BOOKS || 'books';
  */
 module.exports.create = (event, context, callback) => {
 
-    const body = event.body ? event.body : event;
-    const data = JSON.parse(body);
+    let data;
+
+    try {
+        const body = event.body ? event.body : event;
+        data = JSON.parse(body);
+    } catch (err) {
+        return response.json(callback, {
+            status: 400,
+            message: 'Invalid JSON body'
+        }, 400);
+    }
 
     const hashkey = uuid();
 

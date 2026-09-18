@@ -151,6 +151,26 @@ curl -X GET \
     https://yur25zhqo0.execute-api.us-east-1.amazonaws.com/production/services/books
 ```
 
+The list endpoint is cursor based. Use the optional `limit` query parameter to
+define the page size and pass the previous response's `next_cursor` back as the
+`cursor` query parameter to fetch the following page. When `next_cursor` is
+`null` there is no more data.
+
+```bash
+curl -X GET \
+    "https://yur25zhqo0.execute-api.us-east-1.amazonaws.com/production/services/books?limit=50"
+
+curl -X GET \
+    "https://yur25zhqo0.execute-api.us-east-1.amazonaws.com/production/services/books?limit=50&cursor=<next_cursor>"
+```
+
+```json
+{
+  "items": [{ "hashkey": "...", "title": "American Gods" }],
+  "next_cursor": "eyJoYXNoa2V5IjoiLi4uIn0"
+}
+```
+
 [![asciicast](https://asciinema.org/a/OAT6cNHhPhfZdgYBSB0sNFN5Q.png)](https://asciinema.org/a/OAT6cNHhPhfZdgYBSB0sNFN5Q)
 
 

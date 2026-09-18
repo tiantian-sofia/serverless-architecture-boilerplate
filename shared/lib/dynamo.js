@@ -10,7 +10,10 @@ const dev = {
     convertEmptyValues: true
 };
 
-const prod = { region: process.env.REGION || 'us-east-1' };
+const prod = {
+    region: process.env.REGION || 'us-east-1',
+    convertEmptyValues: true
+};
 
 const config = process.env.IS_OFFLINE ? dev : prod
 
@@ -49,10 +52,10 @@ const client = {
     /**
      * Find by Key comparison
      */
-    find: where => {
+    find: (where, table = tableDynamo) => {
 
         const params = {
-            TableName: tableDynamo,
+            TableName: table,
             Key: where
         };
 
@@ -64,8 +67,8 @@ const client = {
      * You must inform the KeyConditionExpression 
      * and ExpressionAttributeNames
      */
-    query: where => {
-        where.TableName = tableDynamo;
+    query: (where, table = tableDynamo) => {
+        where.TableName = table;
         return dynamoClient.query(where).promise();
     },
 
@@ -75,6 +78,9 @@ const client = {
      */
     scan: (params, limit, table = tableDynamo) => {
         params.TableName = table;
+        if (limit) {
+            params.Limit = limit;
+        }
         return dynamoClient.scan(params).promise();
     },
 
