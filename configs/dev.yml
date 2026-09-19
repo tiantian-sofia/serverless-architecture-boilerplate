@@ -1,5 +1,9 @@
 ENV: dev
 MESSAGE: 'serverless boilerplate'
-DYNAMO_TABLE_BOOKS: ${self:custom.dynamo-books} # Reference to Custom Env
+DYNAMO_TABLE_BOOKS: ${self:custom.dynamo-books}
 SQS_QUEUE_URL: 'https://sqs.${self:provider.region}.amazonaws.com/#{AWS::AccountId}/${self:custom.sqs-logs}'
 REGION: ${self:custom.region}
+BOOK_EVENT_STATE_TABLE: ${self:custom.dynamo-books-event-state}
+BOOK_EVENT_IDEMPOTENCY_TABLE: ${self:custom.dynamo-books-event-idempotency}
+BOOKS_DLQ_URL: 'https://sqs.${self:provider.region}.amazonaws.com/#{AWS::AccountId}/${self:custom.sqs-books-dlq}'
+SQS_MAX_RECEIVE_COUNT: ${self:custom.booksConsumer.maxReceiveCount}

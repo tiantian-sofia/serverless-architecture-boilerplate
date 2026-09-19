@@ -30,8 +30,7 @@ const _sqs = new AWS.SQS(options);
  * @Author: Matheus 'Raj' Fidelis <msfidelis01@gmail.com>
  * @save() - Interface Method. - Save Item on SQS Queue;
  * @sendToQueue() - Save Item on SQS Queue;
- * @consumeQueue() - Consume Queue Messages;
- * @removeFromQueue() - Remove Message from Queue;
+ * @sendRaw() - Send an already built SQS message;
  */
 const client = {
 
@@ -64,38 +63,10 @@ const client = {
         return _sqs.sendMessage(params).promise();
     },
     /**
-     * Get messages from Queue
+     * Send a raw SQS message
      */
-    consumeQueue: (numberOfMessages = 1, queue=endpoint) => {
-
-        const url = process.env.IS_OFFLINE ? `${local}/queue/${queue}` : queue;
-        const params = {
-            QueueUrl: url,
-            MaxNumberOfMessages: numberOfMessages
-        };
-
-        console.log(params);
-
-        return _sqs.receiveMessage(params).promise();
-    },
-    /**
-     * Remove message from quue
-     */
-    removeFromQueue: (message, queue=endpoint) => {
-
-        if (message !== false && message !== undefined) {
-
-            const url = process.env.IS_OFFLINE ? `${local}/queue/${queue}` : queue;
-
-            const params = {
-                QueueUrl: url,
-                ReceiptHandle: message.ReceiptHandle
-            };
-    
-            return _sqs.deleteMessage(params).promise();
-    
-        }
-
+    sendRaw: params => {
+        return _sqs.sendMessage(params).promise();
     }
 }
 

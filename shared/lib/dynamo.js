@@ -47,6 +47,15 @@ const client = {
     },
 
     /**
+     * Execute a DynamoDB transactional write
+     */
+    transactWrite: transactItems => {
+        return dynamoClient.transactWrite({
+            TransactItems: transactItems
+        }).promise();
+    },
+
+    /**
      * Find by Key comparison
      */
     find: where => {

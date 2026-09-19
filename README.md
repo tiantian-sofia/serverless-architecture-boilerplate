@@ -69,20 +69,24 @@ functions:
 
 ```
 
-### Cloudwatch Events Functions (Cron)
+### SQS Event-Driven Consumer
 
-[Lambda Schedule Docs](https://serverless.com/framework/docs/providers/aws/events/schedule/)
+The books consumer uses a native SQS Event Source Mapping with partial batch response support. Retryable messages return their SQS message identifiers, duplicate and stale events are acknowledged, and invalid payloads are moved to the DLQ with error metadata.
 
-```yml
-# Background Function
-  books-consumer:
-    handler: modules/books/functions/worker/handler.worker #Path to function
-    events:
-      - schedule: #Cloudwatch Event Trigger
-        rate: cron(* * * * * *) # Cron Syntax 
-        enabled: true # Trigger Enabled
-
+```yaml
+books-consumer:
+  handler: modules/books/functions/worker/handler.worker
+  timeout: 60
+  events:
+    - sqs:
+        arn: !GetAtt BooksQueueExample.Arn
+        batchSize: 10
+        maximumBatchingWindow: 5
+        maximumConcurrency: 5
+        functionResponseType: ReportBatchItemFailures
 ```
+
+The queue visibility timeout defaults to six Lambda timeouts plus the batching window, and the main queue redrives messages after the configurable `SQS_MAX_RECEIVE_COUNT`. Batch size, batching window, concurrency, Lambda timeout, visibility timeout and max receive count can be overridden with environment variables when deploying.
 
 ## Development environment 
 
@@ -98,7 +102,6 @@ The applications will start on `http://localhost:3000`
 This boilerplate contains following plugins for local development: 
 
 * [serverless-offline](https://github.com/dherault/serverless-offline/issues) - For run API Gateway local and manage plugins 
-* [serverless-offline-scheduler](https://github.com/ajmath/serverless-offline-scheduler) - CloudWatch Schedule Adapter
 * [serverless-offline-sqs-esmq](https://github.com/msfidelis/serverless-offline-sqs-esmq) - SQS Adapter
 * [serverless-dynamodb-local](https://github.com/99xt/serverless-dynamodb-local/releases) - DynamoDB Adapter
 * [serverless-plugin-split-stacks](https://github.com/dougmoscrop/serverless-plugin-split-stacks) - Split Cloudformation Templates
@@ -259,11 +262,17 @@ resources:  # CloudFormation template syntax
           ReadCapacityUnits: 2
           WriteCapacityUnits: 1
 
-    # SQS Queue to Update DynamoDB
+    # SQS DLQ and queue to update DynamoDB
+    BooksDeadLetterQueue:
+      Type: AWS::SQS::Queue
+
     BooksQueueExample:
       Type: AWS::SQS::Queue
       Properties:
         QueueName: ${self:custom.sqs-logs}
         MessageRetentionPeriod: 1209600
-        VisibilityTimeout: 60
+        VisibilityTimeout: ${self:custom.booksConsumer.visibilityTimeoutSeconds}
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt BooksDeadLetterQueue.Arn
+          maxReceiveCount: ${self:custom.booksConsumer.maxReceiveCount}
 ```

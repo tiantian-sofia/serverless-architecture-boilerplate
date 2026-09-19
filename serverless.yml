@@ -30,6 +30,7 @@ provider:
       - dynamodb:PutItem
       - dynamodb:UpdateItem
       - dynamodb:DeleteItem
+      - dynamodb:TransactWriteItems
     Resource: "arn:aws:dynamodb:*:*:*"
 
   - Effect: Allow
@@ -39,11 +40,23 @@ provider:
     Resource: "*"
 
   - Effect: Allow
-    Action: # Gives permission to SQS 
-      - sqs:DeleteMessage
-      - sqs:ReceiveMessage
+    Action:
       - sqs:SendMessage
-    Resource: arn:aws:sqs:*:*:*
+      - sqs:ReceiveMessage
+      - sqs:DeleteMessage
+      - sqs:GetQueueAttributes
+    Resource:
+      - Fn::GetAtt:
+          - BooksQueueExample
+          - Arn
+
+  - Effect: Allow
+    Action:
+      - sqs:SendMessage
+    Resource:
+      - Fn::GetAtt:
+          - BooksDeadLetterQueue
+          - Arn
 
 custom:
   region: ${self:provider.region}
@@ -52,8 +65,12 @@ custom:
   process: ${self:custom.prefix}-process
   config: ${self:custom.prefix}-config
   dynamo-books: ${self:custom.prefix}-BooksCatalog
+  dynamo-books-event-state: ${self:custom.prefix}-BooksEventState
+  dynamo-books-event-idempotency: ${self:custom.prefix}-BooksEventIdempotency
   sns-logs: ${self:custom.prefix}-trigger-logs
   sqs-logs: ${self:custom.prefix}-messages-logs
+  sqs-books-dlq: ${self:custom.prefix}-messages-logs-dlq
+  booksConsumer: ${file(./configs/books-consumer.js)}
 
   serverless-offline:
     host: '0.0.0.0'
@@ -86,7 +103,6 @@ custom:
 plugins:
   - serverless-pseudo-parameters
   - serverless-dynamodb-local
-  - serverless-offline-scheduler
   - serverless-offline-sqs-esmq
   - serverless-offline
 
@@ -111,10 +127,51 @@ resources:  # CloudFormation template syntax
           ReadCapacityUnits: 2
           WriteCapacityUnits: 1
 
+    BooksEventState:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.dynamo-books-event-state}
+        AttributeDefinitions:
+          - AttributeName: hashKey
+            AttributeType: S
+        KeySchema:
+          - AttributeName: hashKey
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 2
+          WriteCapacityUnits: 1
+
+    BooksEventIdempotency:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.dynamo-books-event-idempotency}
+        AttributeDefinitions:
+          - AttributeName: eventId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: eventId
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 2
+          WriteCapacityUnits: 1
+
+    BooksDeadLetterQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:custom.sqs-books-dlq}
+        MessageRetentionPeriod: 1209600
+
     # SQS Queue to Update DynamoDB
     BooksQueueExample:
       Type: AWS::SQS::Queue
+      DependsOn: BooksDeadLetterQueue
       Properties:
         QueueName: ${self:custom.sqs-logs}
         MessageRetentionPeriod: 1209600
-        VisibilityTimeout: 60
+        VisibilityTimeout: ${self:custom.booksConsumer.visibilityTimeoutSeconds}
+        RedrivePolicy:
+          deadLetterTargetArn:
+            Fn::GetAtt:
+              - BooksDeadLetterQueue
+              - Arn
+          maxReceiveCount: ${self:custom.booksConsumer.maxReceiveCount}
