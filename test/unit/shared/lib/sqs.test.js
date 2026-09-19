@@ -1,29 +1,28 @@
 const expect = require("chai").expect;
-const assert = require("chai").assert;
 
 const sqs = require('../../../../shared/lib/sqs');
 
-describe("#sqs library signature", () => {
-
-    it("#Have save() method", () => {
-        expect(sqs).to.be.an('object').and.include.all.keys('save');
-        expect(sqs.save).to.be.an('function');
-    });
+describe("#sqs publish-only library signature", () => {
 
     it("#Have sendToQueue() method", () => {
-        expect(sqs).to.be.an('object').and.include.all.keys('sendToQueue');
         expect(sqs.sendToQueue).to.be.an('function');
     });
 
-    it("#Have consumeQueue() method", () => {
-        expect(sqs).to.be.an('object').and.include.all.keys('consumeQueue');
-        expect(sqs.consumeQueue).to.be.an('function');
+    it("#Have save() backwards compatible alias", () => {
+        expect(sqs.save).to.equal(sqs.sendToQueue);
     });
 
-    it("#Have removeFromQueue() method", () => {
-        expect(sqs).to.be.an('object').and.include.all.keys('removeFromQueue');
-        expect(sqs.removeFromQueue).to.be.an('function');
+    it("#Expose a createClient() factory", () => {
+        expect(sqs.createClient).to.be.an('function');
+        const custom = sqs.createClient({ region: 'us-east-1' });
+        expect(custom.sendToQueue).to.be.an('function');
+        expect(custom.raw).to.be.an('object');
     });
 
+    it("#No longer expose polling or deletion helpers", () => {
+        // The Event Source Mapping owns ReceiveMessage/DeleteMessage.
+        expect(sqs.consumeQueue).to.equal(undefined);
+        expect(sqs.removeFromQueue).to.equal(undefined);
+    });
 
 });

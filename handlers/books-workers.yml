@@ -1,17 +1,36 @@
-# Background Function
+  # Background Function - SQS event driven consumer.
+  # The SQS Event Source Mapping replaces the old scheduled trigger and
+  # in-Lambda polling: AWS Lambda long-polls the queue and invokes the
+  # function with a batch of messages.
   books-consumer:
     handler: modules/books/functions/worker/handler.worker
-    timeout: 60
+    timeout: ${self:custom.worker-timeout}
+    memorySize: 512
+    # Reserved concurrency is the enforced upper bound for concurrent
+    # consumer invocations. Kept in sync with the ESM MaximumConcurrency
+    # (older Serverless Framework versions do not expose maximumConcurrency
+    # on the sqs event, so reservedConcurrency is the portable cap).
+    reservedConcurrency: ${self:custom.sqs-max-concurrency}
+    environment:
+      DYNAMO_TABLE_BOOKS: ${self:custom.dynamo-books}
+      IDEMPOTENCY_TABLE: ${self:custom.dynamo-books-idempotency}
+      SQS_QUEUE_URL: 'https://sqs.${self:provider.region}.amazonaws.com/#{AWS::AccountId}/${self:custom.sqs-logs}'
+      DLQ_QUEUE_URL: 'https://sqs.${self:provider.region}.amazonaws.com/#{AWS::AccountId}/${self:custom.sqs-logs-dlq}'
+      SQS_MAX_RECEIVE_COUNT: ${self:custom.sqs-max-receive-count}
+      LAMBDA_TIMEOUT_MS: ${self:custom.worker-timeout}000
+      PER_RECORD_BUDGET_MS: '8000'
+      RESERVED_TAIL_MS: '2000'
+      REGION: ${self:custom.region}
     events:
-      - schedule: 
-          rate: rate(1 minute) # Rate Syntax
-          # rate: cron(* * ? * * *) # Cron Syntax
-          enabled: true # Trigger Enabled
-
-  envs-temp:
-    handler: modules/books/endpoints/read.envs
-    timeout: 60
-    events:
-      - http:
-          path: services/envs
-          method: get  
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - BooksQueueExample
+              - Arn
+          # Maximum number of messages delivered per invocation
+          batchSize: ${self:custom.sqs-batch-size}
+          # Maximum seconds Lambda waits to gather a full batch
+          maximumBatchingWindow: ${self:custom.sqs-max-batching-window}
+          # Only failed messages (by messageId) are returned to the queue;
+          # successful messages are deleted by the Event Source Mapping.
+          functionResponseType: ReportBatchItemFailures

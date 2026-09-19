@@ -69,20 +69,49 @@ functions:
 
 ```
 
-### Cloudwatch Events Functions (Cron)
+### SQS Event-Driven Consumer (books-consumer)
 
-[Lambda Schedule Docs](https://serverless.com/framework/docs/providers/aws/events/schedule/)
+The `books-consumer` is triggered by an SQS **Event Source Mapping** (no
+scheduled polling, no in-Lambda `setInterval`, no manual
+`ReceiveMessage`/`DeleteMessage`).
 
 ```yml
-# Background Function
-  books-consumer:
-    handler: modules/books/functions/worker/handler.worker #Path to function
-    events:
-      - schedule: #Cloudwatch Event Trigger
-        rate: cron(* * * * * *) # Cron Syntax 
-        enabled: true # Trigger Enabled
-
+books-consumer:
+  handler: modules/books/functions/worker/handler.worker
+  timeout: 30
+  reservedConcurrency: 10           # hard cap on concurrent consumers
+  events:
+    - sqs:
+        arn: { Fn::GetAtt: [BooksQueueExample, Arn] }
+        batchSize: 10               # SQS_BATCH_SIZE
+        maximumBatchingWindow: 5    # SQS_MAX_BATCHING_WINDOW (seconds)
+        functionResponseType: ReportBatchItemFailures
 ```
+
+Key properties:
+
+* **Partial batch failures** - the handler returns `batchItemFailures`;
+  only failed messages are redriven, successes are deleted by the ESM.
+* **DLQ + redrive** - the main queue has a `RedrivePolicy` with a
+  configurable `maxReceiveCount` (`SQS_MAX_RECEIVE_COUNT`). Poison messages
+  are forwarded to the DLQ immediately with a failure reason attribute.
+* **Idempotency / ordering** - each event carries `eventId`, `hashKey`,
+  monotonic `version`, `type`, `payload`. A single DynamoDB
+  `TransactWriteItems` does a conditional put on the `BooksEventIdempotency`
+  ledger (`attribute_not_exists(eventId)`) and a conditional state update
+  (`version < :newVersion`). Duplicate deliveries are acked, stale versions
+  are ignored, concurrent updates for one `hashKey` are serialized.
+* **Timeouts** - queue `VisibilityTimeout` (default 330s) exceeds the
+  batching window plus six times the Lambda timeout; the handler refuses to
+  start a record without enough remaining time and redrives it instead.
+* **Observability** - structured JSON logs and CloudWatch EMF metrics
+  (`Processed` with `Outcome` = success/duplicate/stale/permanent_failure/
+  retryable_failure/dlq/timeout_skip, plus `MessagesToDLQ` and `BatchSize`).
+
+Tuning env vars (with defaults): `SQS_BATCH_SIZE=10`,
+`SQS_MAX_BATCHING_WINDOW=5`, `SQS_MAX_CONCURRENCY=10`,
+`SQS_MAX_RECEIVE_COUNT=5`, `SQS_VISIBILITY_TIMEOUT=330`,
+`WORKER_TIMEOUT=30`.
 
 ## Development environment 
 
@@ -98,7 +127,6 @@ The applications will start on `http://localhost:3000`
 This boilerplate contains following plugins for local development: 
 
 * [serverless-offline](https://github.com/dherault/serverless-offline/issues) - For run API Gateway local and manage plugins 
-* [serverless-offline-scheduler](https://github.com/ajmath/serverless-offline-scheduler) - CloudWatch Schedule Adapter
 * [serverless-offline-sqs-esmq](https://github.com/msfidelis/serverless-offline-sqs-esmq) - SQS Adapter
 * [serverless-dynamodb-local](https://github.com/99xt/serverless-dynamodb-local/releases) - DynamoDB Adapter
 * [serverless-plugin-split-stacks](https://github.com/dougmoscrop/serverless-plugin-split-stacks) - Split Cloudformation Templates
